@@ -1,0 +1,133 @@
+
+_____________________________________________
+
+BVH_Model_Instancing.js
+.
+.
+
+
+Prepare_Model_For_PathTracing() (line 278)
+.
+.
+
+// 2048 = width of texture, 2048 = height of texture, 4 = r,g,b,a components
+// there are 8 slots each with 4 elements - 8 * 4 = 32 element (float) array
+
+triangle_array = new Float32Array(2048 * 2048 * 4);
+aabb_array = new Float32Array(2048 * 2048 * 4);
+.
+.
+
+// vpa - vertex position array
+// vna - vertex normal array
+// vta - vertex uv array
+
+let vpa = new Float32Array(modelMesh.geometry.attributes.position.array);
+let vna = new Float32Array(modelMesh.geometry.attributes.normal.array);
+let vta = new Float32Array(modelMesh.geometry.attributes.uv.array);
+.
+.
+
+// vp0, vp1, vp2 - vertex 1,2,3 position	- THREE.Vector3();
+// vn0, vn1, vn2 - vertex 1,2,3 normal 	- THREE.Vector3();
+// vt0, vt1, vt2 - vertex 1,2,3 uv 		- THREE.Vector2();
+
+//triangle_array slots (8 slots, 4 elements per slot, 32 elements total)
+
+vp0.x, vp0.y, vp0.z, vp1.x //triangle_array slot 0
+vp1.y, vp1.z, vp2.x, vp2.y //triangle_array slot 1
+vp2.z, vn0.x, vn0.y, vn0.z //triangle_array slot 2
+vn1.x, vn1.y, vn1.z, vn2.x //triangle_array slot 3
+vn2.y, vn2.z, vt0.x, vt0.y //triangle_array slot 4
+vt1.x, vt1.y, vt2.x, vt2.y //triangle_array slot 5
+pathTracingMaterialList[materialNumber].type, pathTracingMaterialList[materialNumber].color.r, pathTracingMaterialList[materialNumber].color.g, pathTracingMaterialList[materialNumber].color.b //triangle_array slot 6
+pathTracingMaterialList[materialNumber].albedoTextureID, 0, 0, 0 //triangle_array slot 7
+.
+.
+
+
+// create triangle_b_box_min, min corner of the bounding box for the triangle (vp0, vp1, vp2) by selecting the smallest coordinate from all three points
+triangle_b_box_min.copy(triangle_b_box_min.min(vp0));
+triangle_b_box_min.copy(triangle_b_box_min.min(vp1));
+triangle_b_box_min.copy(triangle_b_box_min.min(vp2));
+
+// create triangle_b_box_max, max corner of the bounding box for the triangle (vp0, vp1, vp2) by selecting the largest coordinate from all three points
+triangle_b_box_max.copy(triangle_b_box_max.max(vp0));
+triangle_b_box_max.copy(triangle_b_box_max.max(vp1));
+triangle_b_box_max.copy(triangle_b_box_max.max(vp2));
+.
+.
+
+// aabb_array elements (9 in total)
+triangle_b_box_min.x, triangle_b_box_min.y, triangle_b_box_min.z				// min corner of the bounding box for the triangle (vp0, vp1, vp2)
+triangle_b_box_max.x, triangle_b_box_max.y, triangle_b_box_max.z				// max corner of the bounding box for the triangle (vp0, vp1, vp2)
+triangle_b_box_centroid.x, triangle_b_box_centroid.y, triangle_b_box_centroid.z	// centroid of the bounding box for the triangle (vp0, vp1, vp2)
+.
+.
+
+
+// Build the BVH acceleration structure...
+// Similar to k-d tree structure (binary space partitioning), speeds up one-to-many relationship algorithms
+// used when checking the collision of the ray with the triangles, instead of checking each triangle (one operation for each triangle, N steps)
+// it checks it through bounding boxes and finds the collision in max. log(N) steps
+
+BVH_Build_Iterative(totalWork, aabb_array);
+
+
+triangleDataTexture = new THREE.DataTexture(
+	triangle_array, 				// data
+	2048,						// width
+	2048,						// height
+	THREE.RGBAFormat,				// format
+	THREE.FloatType,				// type
+	THREE.Texture.DEFAULT_MAPPING,	// mapping
+	THREE.ClampToEdgeWrapping,		// wrapS
+	THREE.ClampToEdgeWrapping,		// wrapT
+	THREE.NearestFilter,			// magFilter
+	THREE.NearestFilter,			// minFilter
+	1,						// anisotropy
+	THREE.LinearEncoding);			// ecoding
+
+aabbDataTexture = new THREE.DataTexture(
+	aabb_array,
+	2048,
+	2048,
+	THREE.RGBAFormat,
+	THREE.FloatType,
+	THREE.Texture.DEFAULT_MAPPING,
+	THREE.ClampToEdgeWrapping,
+	THREE.ClampToEdgeWrapping,
+	THREE.NearestFilter,
+	THREE.NearestFilter,
+	1,
+	THREE.LinearEncoding);
+
+
+_____________________________________________
+
+BVH_Model_Instancing_Fragment.glsl
+.
+.
+
+
+SceneIntersect() (line 295)
+.
+.
+
+// when we are converting from a 1D index to a 2D co-ordinate in a regular (square) grid we can use the the form:
+
+// x = index % width
+// y = index / width
+
+// to speed things up we are using an precalculated inverse value for width here: 1/2048
+  
+uv0 = ivec2( mod(id + 0.0, 2048.0), (id + 0.0) * INV_TEXTURE_WIDTH );
+uv1 = ivec2( mod(id + 1.0, 2048.0), (id + 1.0) * INV_TEXTURE_WIDTH );
+uv2 = ivec2( mod(id + 2.0, 2048.0), (id + 2.0) * INV_TEXTURE_WIDTH );
+
+.		
+.
+
+// here we are calculating the middle point (centroid) between three point vectors (triangle points) by averaging them
+
+leafPosition = ( vec3(vd0.xyz) + vec3(vd0.w, vd1.xy) + vec3(vd1.zw, vd2.x) ) / 3.0;
