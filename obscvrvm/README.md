@@ -1,2 +1,0 @@
-# hyprOrnament
-Next Level Lattices
