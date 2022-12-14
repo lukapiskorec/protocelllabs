@@ -1,8 +1,6 @@
 ![{protocell:labs} logo](https://github.com/lukapiskorec/protocelllabs/blob/main/media/protocell_labs_logo_anim_01.gif?raw=true)
 
-# {protocell:labs}
-
-Repository holding code with {protocell:labs} NFT collections
+Repository holding code for {protocell:labs} NFT collections
 
 1. Monocell
 2. Chromoplasm
